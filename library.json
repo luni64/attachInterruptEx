@@ -1,0 +1,23 @@
+{
+    "name": "IntervalTimerEx",
+    "keywords": "callbacks, arduino, teensy ",
+    "description": "Extends the standard attachInterrupt function to allow passing state to the pin interrupt callbacks. Accepts free functions and static member functions, lambda expressions and functors as callbacks",
+    "repository":
+    {
+      "type": "git",
+      "url": "https://github.com/luni64/AttachInterruptEx"
+    },
+    "authors":
+    {
+      "name": "luni64",
+      "url": "https://github.com/luni64",
+      "maintainer": true
+    },
+    "dependencies":
+    {
+    "CallbackHelper": "https://github.com/luni64/CalbackHelper.git#>0.1.2"
+    },
+    "homepage": "https://github.com/luni64/AttachInterruptEx",
+    "version": "0.1.0",
+    "frameworks": "arduino"
+  }
