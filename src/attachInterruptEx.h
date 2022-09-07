@@ -7,7 +7,12 @@
 
 constexpr unsigned num_pins = CORE_NUM_DIGITAL;
 
-CallbackHelper<num_pins> cbh;
+// setup the callbackHelper
+using callbackHelper_t = CallbackHelper<void(void), num_pins>; // callback helper using slots for all digital pins, handles void(void) callbacks
+using callback_t       = callbackHelper_t::callback_t;         // type of the callbacks
+
+callbackHelper_t cbh;     // helps to generate callbacks from various parameters (function pointers, lambdas, functors...)
+callback_t* cb[num_pins]; // array to store pointers to the generated callbacks
 
 //===============================================================================
 // Let the compiler prepare an array of void(*)() relay_functions. These relay
@@ -25,7 +30,7 @@ void relay()
     callbacks[nr]->invoke();
 }
 
-// helper function to generate a std::array intialized with the corresponding relay functions
+// helper function to generate a std::array initalized with the corresponding relay functions
 template <std::size_t... I>
 constexpr std::array<void (*)(), num_pins> MakeRelays(std::index_sequence<I...>)
 {
@@ -35,19 +40,9 @@ constexpr std::array<void (*)(), num_pins> MakeRelays(std::index_sequence<I...>)
 // Let the compiler generate the array of relay functions (compile-time generation)
 constexpr auto relays = MakeRelays(std::make_index_sequence<num_pins>{});
 
-
 //===================================================================================
-// Two versions of attachInterruptEx:
-//   The first accepts pointers to
-//   free functions and static member functions.
-//   The second accepts lambdas (capturing or non-capturing) and functors
-
-inline void attachInterruptEx(unsigned pin, void (*callback)(), int mode)
-{
-    if (pin >= num_pins) return;
-    callbacks[pin] = cbh.makeCallback(callback, pin); // store the callback function in its array
-    attachInterrupt(pin, relays[pin], mode);          // attach the relay function to the pin interrupt
-}
+//   attachInterruptEx relays the real work and housekeeping to the standard
+//   attachInterrupt function//
 
 template <typename T>
 void attachInterruptEx(unsigned pin, T&& callback, int mode)
