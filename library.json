@@ -1,5 +1,5 @@
 {
-    "name": "IntervalTimerEx",
+    "name": "AttachInterruptEx",
     "keywords": "callbacks, arduino, teensy ",
     "description": "Extends the standard attachInterrupt function to allow passing state to the pin interrupt callbacks. Accepts free functions and static member functions, lambda expressions and functors as callbacks",
     "repository":
