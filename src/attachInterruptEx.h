@@ -1,53 +1,65 @@
 #pragma once
 
-#include "attachInterruptEx.h"
-#include "callbackHelper.h"
-#include "core_pins.h"
+#include "Arduino.h"
+#include "CallbackHelper.h"
 #include <array>
 
-constexpr unsigned num_pins = CORE_NUM_DIGITAL;
-
-// setup the callbackHelper
-using callbackHelper_t = CallbackHelper<void(void), num_pins>; // callback helper using slots for all digital pins, handles void(void) callbacks
-using callback_t       = callbackHelper_t::callback_t;         // type of the callbacks
-
-callbackHelper_t cbh;     // helps to generate callbacks from various parameters (function pointers, lambdas, functors...)
-callback_t* cb[num_pins]; // array to store pointers to the generated callbacks
-
-//===============================================================================
-// Let the compiler prepare an array of void(*)() relay_functions. These relay
-// functions will be attached to the pin interrupts.
-// Each relay will invoke its corresponding callback, which is stored
-// in the callbacks array
-
-// plain array to store pointers to the actual callbacks
-callback_t* callbacks[num_pins];
-
-// relay function to be attached to the pin interrupt
-template <unsigned nr>
-void relay()
+namespace AttachInterruptEx
 {
-    callbacks[nr]->invoke();
+    constexpr unsigned num_slots = 5; // increase if you need more interrupt slots active in parallel
+
+    // setup the callbackHelper
+    using callbackHelper_t = CallbackHelper<void(void), num_slots>; // callback helper using num_slots callback slots. Accepts void(void) callbacks (function pointers,lambdas, functors etc)
+    using callback_t       = callbackHelper_t::callback_t;          // type of the callbacks
+    using relay_t          = void (*)();                            // type of the relay functions which relay the ISR to the actual callback
+
+    struct callbackInfo
+    {
+        int pin;              // we need the pin number to be able to detach later
+        callback_t* callback; // pointer to the actual callback
+        relay_t relay;        // relays the ISR to the callback
+    };
+
+    extern std::array<callbackInfo, num_slots> callbackInfos; // storage for num_slot callbackInfo structures. 12byte per slot.
+    extern callbackHelper_t callbackHelper;                   // generates callbacks from various parameters (function pointers, lambdas, functors...)
 }
-
-// helper function to generate a std::array initalized with the corresponding relay functions
-template <std::size_t... I>
-constexpr std::array<void (*)(), num_pins> MakeRelays(std::index_sequence<I...>)
-{
-    return std::array<void (*)(), num_pins>{relay<I>...};
-}
-
-// Let the compiler generate the array of relay functions (compile-time generation)
-constexpr auto relays = MakeRelays(std::make_index_sequence<num_pins>{});
-
-//===================================================================================
-//   attachInterruptEx relays the real work and housekeeping to the standard
-//   attachInterrupt function//
-
+//=====================================================================================================
+// attachInterruptEx relays the real work and housekeeping to the standard attachInterrupt function
+// returns false if no free slot was found.
 template <typename T>
-void attachInterruptEx(unsigned pin, T&& callback, int mode)
+bool attachInterruptEx(uint_fast8_t pin, T&& callback, int mode)
 {
-    if (pin >= num_pins) return;
-    callbacks[pin] = cbh.makeCallback(std::forward<T>(callback), pin); // store the callback function in its array
-    attachInterrupt(pin, relays[pin], mode);                           // attach the relay function to the pin interrupt
+    using namespace AttachInterruptEx;
+
+    for (unsigned slot = 0; slot < num_slots; slot++)
+    {
+        auto& cbi = callbackInfos[slot]; // save typing
+        if (cbi.pin == -1)
+        {
+            cbi.callback = callbackHelper.makeCallback(std::forward<T>(callback), slot); // get and store a pointer to the actual callback function
+            cbi.pin      = pin;                                                          // we need the pin allow detaching
+            ::attachInterrupt(cbi.pin, cbi.relay, mode);                                 // cbi.relay is preset at compile time
+            return true;
+        }
+    }
+    return false; // didn't find a free slot, ignore request and inform the caller
+}
+
+//=====================================================================================================
+// detachInterruptEx gets the slot number where the pin interrupt was stored,
+// uses the standard detachInterrupt function to detach the pin,
+// updates to callbackInfos array (sets back the entry to default values)
+inline void detachInterruptEx(int_fast8_t pin)
+{
+    using namespace AttachInterruptEx;
+    for (unsigned slot = 0; slot < num_slots; slot++)
+    {
+        auto& cbi = callbackInfos[slot];
+        if (cbi.pin == pin)
+        {
+            ::detachInterrupt(pin);
+            cbi.pin      = -1;
+            cbi.callback = nullptr;
+        }
+    }
 }
